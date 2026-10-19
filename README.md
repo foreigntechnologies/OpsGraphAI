@@ -6,9 +6,13 @@ OpsGraph AI is an AI-native Site Reliability Engineering (SRE) and real-time obs
 
 ## 🎬 Live Platform Walkthrough
 
-<video src="https://github.com/foreigntechnologies/OpsGraphAI/raw/main/assets/demo.mp4" controls muted width="100%"></video>
+<p align="center">
+  <a href="https://github.com/foreigntechnologies/OpsGraphAI/raw/main/assets/demo.mp4">
+    <img src="assets/demo.gif" alt="OpsGraph AI live platform walkthrough" width="100%">
+  </a>
+</p>
 
-▶️ **[Watch the 24s demo](https://github.com/foreigntechnologies/OpsGraphAI/raw/main/assets/demo.mp4)**
+▶️ **[Watch the demo (MP4, 24s)](https://github.com/foreigntechnologies/OpsGraphAI/raw/main/assets/demo.mp4)**
 
 > **Demo (24s):** Live reliability dashboard streaming real Prometheus metrics across the 5 microservices (`payments-api`, `api-gateway`, `auth-service`, `orders-api`, `notifications-service`), the observability stack health (Prometheus, Grafana Loki, Grafana Tempo, OTel Collector, Grafana UI), and the Chaos Engineering controller used to inject real faults.
 
