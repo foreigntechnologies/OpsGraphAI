@@ -1,0 +1,190 @@
+datasource db {
+  provider = "sqlite" // PostgreSQL requires a separate schema and migration history.
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model HttpMonitor {
+  id        String      @id
+  name      String
+  url       String
+  enabled   Boolean     @default(true)
+  createdAt DateTime    @default(now())
+  checks    HttpCheck[]
+}
+
+model HttpCheck {
+  id         String      @id @default(uuid())
+  monitorId  String
+  monitor    HttpMonitor @relation(fields: [monitorId], references: [id])
+  checkedAt  DateTime    @default(now())
+  success    Boolean
+  durationMs Int
+  statusCode Int?
+  error      String?
+  @@index([monitorId, checkedAt])
+}
+
+model Service {
+  id               String       @id @default(uuid())
+  name             String       @unique
+  environment      String       @default("production")
+  version          String
+  owner            String
+  sloAvailability  Float        @default(99.99) // Expected availability %
+  sloLatencyP95    Int          @default(500)   // p95 latency limit in ms
+  sloErrorRate     Float        @default(1.0)   // Maximum error rate limit (%)
+  status           String       @default("HEALTHY") // HEALTHY, DEGRADED, CRITICAL
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  incidents        Incident[]
+  deployments      Deployment[]
+}
+
+model Incident {
+  id               String                  @id @default(uuid())
+  title            String
+  description      String
+  severity         String                  @default("SEV-2") // SEV-1, SEV-2, SEV-3, SEV-4
+  status           String                  @default("DETECTED") // DETECTED, TRIAGING, INVESTIGATING, AWAITING_APPROVAL, MITIGATING, MONITORING, RESOLVED, POSTMORTEM
+  category         String?                 // PERFORMANCE, DATABASE, AVAILABILITY, DEPLOYMENT, SECURITY
+  serviceId        String
+  service          Service                 @relation(fields: [serviceId], references: [id])
+  timeline         IncidentTimelineEvent[]
+  hypotheses       Hypothesis[]
+  remediationPlan  RemediationAction[]
+  postmortem       Postmortem?
+  telemetry        TelemetrySnapshot[]
+  agentExecutions  AgentExecution[]
+  startedAt        DateTime                @default(now())
+  resolvedAt       DateTime?
+  mttdSeconds      Int?
+  mttaSeconds      Int?
+  mttrSeconds      Int?
+  createdAt        DateTime                @default(now())
+  updatedAt        DateTime                @updatedAt
+  @@index([serviceId, startedAt])
+  @@index([status])
+}
+
+model IncidentTimelineEvent {
+  id         String   @id @default(uuid())
+  incidentId String
+  incident   Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  timestamp  DateTime @default(now())
+  agent      String   // Triage, Observability, SRE, Investigator, Planner, Risk, System
+  type       String   // INFO, WARNING, ANOMALY, ACTION, APPROVAL
+  message    String
+  status     String   // PENDING, RUNNING, COMPLETED, FAILED, WAITING
+  metadata   String?  // JSON com dados adicionais do evento
+  @@index([incidentId, timestamp])
+}
+
+model Hypothesis {
+  id         String   @id @default(uuid())
+  incidentId String
+  incident   Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  cause      String
+  confidence Float    // E.g. 0.91 for 91%
+  evidence   String   // JSON string array of evidence items
+  isPrimary  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+}
+
+model RemediationAction {
+  id               String    @id @default(uuid())
+  incidentId       String
+  incident         Incident  @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  order            Int
+  title            String
+  description      String
+  riskLevel        String    // LOW, MEDIUM, HIGH, CRITICAL
+  riskScore        Int       // 0 a 100
+  requiresApproval Boolean   @default(true)
+  status           String    @default("PENDING") // PENDING, APPROVED, REJECTED, EXECUTING, COMPLETED
+  executedAt       DateTime?
+  createdAt        DateTime  @default(now())
+}
+
+model Postmortem {
+  id                  String   @id @default(uuid())
+  incidentId          String   @unique
+  incident            Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  title               String
+  summary             String
+  rootCause           String
+  timelineMarkdown    String
+  contributingFactors String
+  correctiveActions   String
+  lessonsLearned      String
+  sloImpactSummary    String
+  publishedAt         DateTime @default(now())
+  ragIndexed          Boolean  @default(false)
+}
+
+model TelemetrySnapshot {
+  id           String   @id @default(uuid())
+  incidentId   String
+  incident     Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  timestamp    DateTime @default(now())
+  latencyP50   Int      // ms
+  latencyP95   Int      // ms
+  latencyP99   Int      // ms
+  errorRate    Float    // %
+  requestsSec  Int
+  cpuUsage     Float    // %
+  memoryUsage  Float    // %
+  phase        String   // BASELINE, INCIDENT, MITIGATING, RECOVERED
+  availabilityWindow String
+  burnRateWindow String
+  budgetWindow String
+  errorRateWindowSeconds Int @default(60)
+  @@index([incidentId, timestamp])
+}
+
+model Deployment {
+  id            String   @id @default(uuid())
+  serviceId     String
+  service       Service  @relation(fields: [serviceId], references: [id])
+  version       String
+  deployedAt    DateTime @default(now())
+  commitHash    String
+  author        String
+  changeSummary String
+  configDiff    String?  // JSON ou diff textual
+  @@index([serviceId, deployedAt])
+}
+
+model AgentExecution {
+  id            String    @id @default(uuid())
+  incidentId    String
+  incident      Incident  @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  executionId   String    @unique
+  durationMs    Int
+  llmCalls      Int
+  tokensUsed    Int
+  estimatedCost Float
+  toolCalls     Int
+  ragQueries    Int
+  docsRetrieved Int
+  nodesExecuted Int       @default(0)  // Displayed in Engineering Metrics Panel
+  traceId       String?                // OpenTelemetry trace ID of workflow execution
+  status        String    @default("COMPLETED")
+  startedAt     DateTime  @default(now())
+  completedAt   DateTime?
+}
+
+model KnowledgeDocument {
+  id         String   @id @default(uuid())
+  slug       String   @unique
+  title      String
+  category   String   // runbook, postmortem, architecture, troubleshooting
+  content    String   // Markdown content
+  summary    String
+  tags       String   // Comma-separated tags
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+

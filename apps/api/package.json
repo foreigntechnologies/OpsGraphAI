@@ -1,0 +1,29 @@
+{
+  "name": "@opsgraph/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate deploy",
+    "rag:index": "tsx src/scripts/index-knowledge.ts"
+  },
+  "dependencies": {
+    "@langchain/core": "^1.2.18",
+    "@langchain/langgraph": "^1.5.1",
+    "@opsgraph/shared": "0.1.0",
+    "@prisma/adapter-libsql": "7.10.1",
+    "@prisma/client": "7.10.1",
+    "dotenv": "^17.2.3",
+    "graphql": "^16.11.0",
+    "graphql-yoga": "^5.24.6",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "prisma": "7.10.1"
+  }
+}

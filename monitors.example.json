@@ -1,0 +1,8 @@
+[
+  { "name": "API Gateway", "url": "http://127.0.0.1:8080/health" },
+  { "name": "Auth Service", "url": "http://127.0.0.1:8081/health" },
+  { "name": "Payments API", "url": "http://127.0.0.1:8082/health" },
+  { "name": "Orders API", "url": "http://127.0.0.1:8083/health" },
+  { "name": "Notifications Service", "url": "http://127.0.0.1:8084/health" },
+  { "name": "OpsGraph API", "url": "http://127.0.0.1:4000/health" }
+]

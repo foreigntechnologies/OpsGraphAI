@@ -1,0 +1,39 @@
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  - job_name: 'api-gateway'
+    static_configs:
+      - targets: ['host.docker.internal:8080']
+        labels:
+          service: 'api-gateway'
+          environment: 'local'
+
+  - job_name: 'auth-service'
+    static_configs:
+      - targets: ['host.docker.internal:8081']
+        labels:
+          service: 'auth-service'
+          environment: 'local'
+
+  - job_name: 'payments-api'
+    static_configs:
+      - targets: ['host.docker.internal:8082']
+        labels:
+          service: 'payments-api'
+          environment: 'local'
+
+  - job_name: 'orders-api'
+    static_configs:
+      - targets: ['host.docker.internal:8083']
+        labels:
+          service: 'orders-api'
+          environment: 'local'
+
+  - job_name: 'notifications-service'
+    static_configs:
+      - targets: ['host.docker.internal:8084']
+        labels:
+          service: 'notifications-service'
+          environment: 'local'

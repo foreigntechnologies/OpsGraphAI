@@ -1,0 +1,38 @@
+{
+  "name": "opsgraph-ai",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "apps/services/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "concurrently -k -n api,web \"npm run dev -w @opsgraph/api\" \"npm run dev -w @opsgraph/web\"",
+    "dev:all": "concurrently -k -n srv,app \"npm run services:dev\" \"npm run dev\"",
+    "services:dev": "concurrently -n gw,auth,pay,ord,notif,traf \"npm run dev -w @opsgraph/api-gateway\" \"npm run dev -w @opsgraph/auth-service\" \"npm run dev -w @opsgraph/payments-api\" \"npm run dev -w @opsgraph/orders-api\" \"npm run dev -w @opsgraph/notifications-service\" \"npm run dev -w @opsgraph/traffic-generator\"",
+    "build": "npm run build -w @opsgraph/shared && npm run build -w @opsgraph/api && npm run build -w @opsgraph/web",
+    "clean": "tsx -e \"import { rmSync } from 'node:fs'; for (const p of ['apps/api/dist', 'packages/shared/dist', 'apps/web/.next']) rmSync(p, { recursive: true, force: true }); console.log('Cleaned build artifacts');\"",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "vitest run",
+    "db:generate": "npm run db:generate -w @opsgraph/api",
+    "db:migrate": "npm run db:migrate -w @opsgraph/api",
+    "setup": "npm run db:generate && npm run db:migrate"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "concurrently": "^9.2.1",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.12"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true,
+    "prisma@7.10.1": true,
+    "@prisma/engines@7.10.1": true
+  }
+}
