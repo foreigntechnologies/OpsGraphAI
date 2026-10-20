@@ -1,0 +1,24 @@
+# ==============================================================================
+# OpsGraph AI — Code Ownership & Review Routing
+# ==============================================================================
+# Default global owners across entire repository
+* @GustavoKoglin @ForeignTechnologies
+
+# Core Monorepo Workspaces
+/apps/api/                         @GustavoKoglin @ForeignTechnologies
+/apps/web/                         @GustavoKoglin @ForeignTechnologies
+/packages/shared/                  @GustavoKoglin @ForeignTechnologies
+/packages/service-kit/             @GustavoKoglin @ForeignTechnologies
+
+# Microservices Mesh
+/apps/services/api-gateway/        @GustavoKoglin @ForeignTechnologies
+/apps/services/auth-service/       @GustavoKoglin @ForeignTechnologies
+/apps/services/payments-api/       @GustavoKoglin @ForeignTechnologies
+/apps/services/orders-api/         @GustavoKoglin @ForeignTechnologies
+/apps/services/notifications-service/ @GustavoKoglin @ForeignTechnologies
+/apps/services/traffic-generator/  @GustavoKoglin @ForeignTechnologies
+
+# Observability Infrastructure & CI/CD
+/infra/                            @GustavoKoglin @ForeignTechnologies
+/.github/                          @GustavoKoglin @ForeignTechnologies
+/knowledge/                        @GustavoKoglin @ForeignTechnologies

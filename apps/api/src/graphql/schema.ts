@@ -54,6 +54,10 @@ const formatIncident = (inc: any) => ({
     createdAt: r.createdAt.toISOString(),
     executedAt: r.executedAt?.toISOString() || null,
   })),
+  decisions: (inc.decisions || []).map((d: any) => ({
+    ...d,
+    createdAt: d.createdAt.toISOString(),
+  })),
 });
 
 export function createApi() {
@@ -239,6 +243,36 @@ export function createApi() {
           createdAt: String!
         }
 
+        type RemediationDecision {
+          id: ID!
+          incidentId: String!
+          actionId: String
+          actionTitle: String
+          decidedBy: String!
+          decision: String!
+          category: String
+          reason: String
+          originalPlan: String
+          editedPlan: String
+          createdAt: String!
+        }
+
+        type CategoryBreakdown {
+          category: String!
+          count: Int!
+        }
+
+        type DecisionStats {
+          totalDecisions: Int!
+          approvedCount: Int!
+          rejectedCount: Int!
+          editedCount: Int!
+          approvalRate: Float!
+          rejectionRate: Float!
+          rejectionsByCategory: [CategoryBreakdown!]!
+          recentDecisions: [RemediationDecision!]!
+        }
+
         type Postmortem {
           id: ID!
           incidentId: String!
@@ -266,6 +300,7 @@ export function createApi() {
           timeline: [IncidentTimelineEvent!]!
           hypotheses: [Hypothesis!]!
           remediationPlan: [RemediationAction!]!
+          decisions: [RemediationDecision!]!
           postmortem: Postmortem
           createdAt: String!
           updatedAt: String!
@@ -284,13 +319,25 @@ export function createApi() {
           activeIncidents: [Incident!]!
           incidents(limit: Int): [Incident!]!
           incident(id: ID!): Incident
+          decisionStats: DecisionStats!
         }
 
         type Mutation {
           enableChaos(service: String!, scenario: String!, paramsJson: String, ttlMinutes: Int): Boolean!
           resetAllChaos: Boolean!
-          approveRemediation(incidentId: ID!, actionId: ID): Incident
-          rejectRemediation(incidentId: ID!, reason: String): Incident
+          approveRemediation(
+            incidentId: ID!
+            actionId: ID
+            decidedBy: String
+            reason: String
+            editedPlanJson: String
+          ): Incident
+          rejectRemediation(
+            incidentId: ID!
+            reason: String
+            category: String
+            decidedBy: String
+          ): Incident
           resolveIncident(id: ID!): Incident
         }
 
@@ -370,6 +417,7 @@ export function createApi() {
                 timeline: { orderBy: { timestamp: 'asc' } },
                 hypotheses: true,
                 remediationPlan: { orderBy: { order: 'asc' } },
+                decisions: { orderBy: { createdAt: 'desc' } },
                 postmortem: true,
               },
               orderBy: { startedAt: 'desc' },
@@ -384,6 +432,7 @@ export function createApi() {
                 timeline: { orderBy: { timestamp: 'asc' } },
                 hypotheses: true,
                 remediationPlan: { orderBy: { order: 'asc' } },
+                decisions: { orderBy: { createdAt: 'desc' } },
                 postmortem: true,
               },
               orderBy: { startedAt: 'desc' },
@@ -398,11 +447,13 @@ export function createApi() {
                 timeline: { orderBy: { timestamp: 'asc' } },
                 hypotheses: true,
                 remediationPlan: { orderBy: { order: 'asc' } },
+                decisions: { orderBy: { createdAt: 'desc' } },
                 postmortem: true,
               },
             });
             return inc ? formatIncident(inc) : null;
           },
+          decisionStats: () => incidentEvaluator.getDecisionStats(),
         },
         Mutation: {
           enableChaos: async (
@@ -423,14 +474,48 @@ export function createApi() {
             );
           },
           resetAllChaos: () => chaos.resetAllChaos(),
-          approveRemediation: async (_parent, args: { incidentId: string; actionId?: string }) => {
-            const inc = await incidentEvaluator.approveAction(args.incidentId, args.actionId);
+          approveRemediation: async (
+            _parent,
+            args: {
+              incidentId: string;
+              actionId?: string;
+              decidedBy?: string;
+              reason?: string;
+              editedPlanJson?: string;
+            },
+          ) => {
+            let editedPlan: any = undefined;
+            if (args.editedPlanJson) {
+              try {
+                editedPlan = JSON.parse(args.editedPlanJson);
+              } catch {}
+            }
+            const inc = await incidentEvaluator.approveAction(
+              args.incidentId,
+              args.actionId,
+              args.decidedBy,
+              args.reason,
+              editedPlan,
+            );
             const formatted = inc ? formatIncident(inc) : null;
             if (formatted) pubsub.publish('incidentUpdated', formatted);
             return formatted;
           },
-          rejectRemediation: async (_parent, args: { incidentId: string; reason?: string }) => {
-            const inc = await incidentEvaluator.rejectAction(args.incidentId, args.reason);
+          rejectRemediation: async (
+            _parent,
+            args: {
+              incidentId: string;
+              reason?: string;
+              category?: string;
+              decidedBy?: string;
+            },
+          ) => {
+            const inc = await incidentEvaluator.rejectAction(
+              args.incidentId,
+              args.reason,
+              args.category,
+              args.decidedBy,
+            );
             const formatted = inc ? formatIncident(inc) : null;
             if (formatted) pubsub.publish('incidentUpdated', formatted);
             return formatted;

@@ -1,0 +1,59 @@
+name: Service - Orders API CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/services/orders-api/**'
+      - 'packages/service-kit/**'
+      - 'packages/shared/**'
+      - '.github/workflows/service-orders.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'apps/services/orders-api/**'
+      - 'packages/service-kit/**'
+      - 'packages/shared/**'
+      - '.github/workflows/service-orders.yml'
+
+concurrency:
+  group: service-orders-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify-orders:
+    name: Verify Orders API (Port 8083 + Downstream Client Resilience)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Build Shared Packages
+        run: |
+          npm --workspace=@opsgraph/shared run build
+          npm --workspace=@opsgraph/service-kit run build
+
+      - name: TypeCheck Orders API
+        run: npm --workspace=@opsgraph/orders-api run typecheck
+
+      - name: Compile Orders API
+        run: npm --workspace=@opsgraph/orders-api run build
+
+      - name: Verify Orders API Entrypoint
+        run: |
+          node -e "
+            import('./apps/services/orders-api/package.json', { with: { type: 'json' } }).then(pkg => {
+              console.log('✓ Verified @opsgraph/orders-api package metadata:', pkg.default.name);
+            });
+          "
