@@ -277,7 +277,13 @@ export class IncidentEvaluator {
     });
   }
 
-  public async approveAction(incidentId: string, actionId?: string) {
+  public async approveAction(
+    incidentId: string,
+    actionId?: string,
+    decidedBy = 'SRE Operator',
+    reason?: string,
+    editedPlan?: any,
+  ) {
     const incident = await db.incident.findUnique({
       where: { id: incidentId },
       include: { service: true, remediationPlan: true },
@@ -288,12 +294,34 @@ export class IncidentEvaluator {
       ? incident.remediationPlan.find((a) => a.id === actionId)
       : incident.remediationPlan[0];
 
+    const isEdited = !!editedPlan;
+
     if (action) {
       await db.remediationAction.update({
         where: { id: action.id },
-        data: { status: 'COMPLETED', executedAt: new Date() },
+        data: {
+          status: 'COMPLETED',
+          executedAt: new Date(),
+          ...(isEdited && typeof editedPlan === 'object' && editedPlan.title ? { title: editedPlan.title } : {}),
+          ...(isEdited && typeof editedPlan === 'object' && editedPlan.description ? { description: editedPlan.description } : {}),
+        },
       });
     }
+
+    // Record structured decision audit trail
+    await db.remediationDecision.create({
+      data: {
+        incidentId,
+        actionId: action?.id || null,
+        actionTitle: action?.title || 'System Baseline Reset',
+        decidedBy,
+        decision: isEdited ? 'EDITED' : 'APPROVED',
+        category: 'ROUTINE_APPROVAL',
+        reason: reason || (isEdited ? 'Remediation plan adjusted by operator before approval' : 'Operator verified telemetry and approved plan'),
+        originalPlan: action ? JSON.stringify(action) : null,
+        editedPlan: isEdited ? JSON.stringify(editedPlan) : null,
+      },
+    });
 
     // Execute safe local remediation via chaos reset
     await this.chaos.resetAllChaos();
@@ -306,9 +334,9 @@ export class IncidentEvaluator {
     await db.incidentTimelineEvent.create({
       data: {
         incidentId,
-        agent: 'Human Operator',
+        agent: decidedBy,
         type: 'APPROVAL',
-        message: `Remediation approved by SRE Operator. Safe local configuration restore triggered.`,
+        message: `Remediation ${isEdited ? 'edited and approved' : 'approved'} by ${decidedBy}.${reason ? ` Reason: ${reason}` : ''} Safe local configuration restore triggered.`,
         status: 'COMPLETED',
       },
     });
@@ -330,12 +358,18 @@ export class IncidentEvaluator {
         timeline: { orderBy: { timestamp: 'asc' } },
         hypotheses: true,
         remediationPlan: true,
+        decisions: { orderBy: { createdAt: 'desc' } },
         postmortem: true,
       },
     });
   }
 
-  public async rejectAction(incidentId: string, reason?: string) {
+  public async rejectAction(
+    incidentId: string,
+    reason?: string,
+    category = 'INCORRECT_ROOT_CAUSE',
+    decidedBy = 'SRE Operator',
+  ) {
     const incident = await db.incident.findUnique({
       where: { id: incidentId },
       include: { service: true, remediationPlan: true },
@@ -350,6 +384,20 @@ export class IncidentEvaluator {
       });
     }
 
+    // Record structured decision audit trail
+    await db.remediationDecision.create({
+      data: {
+        incidentId,
+        actionId: action?.id || null,
+        actionTitle: action?.title || 'Unknown Action',
+        decidedBy,
+        decision: 'REJECTED',
+        category,
+        reason: reason || 'Action rejected by operator',
+        originalPlan: action ? JSON.stringify(action) : null,
+      },
+    });
+
     await db.incident.update({
       where: { id: incidentId },
       data: { status: 'INVESTIGATING' },
@@ -358,9 +406,9 @@ export class IncidentEvaluator {
     await db.incidentTimelineEvent.create({
       data: {
         incidentId,
-        agent: 'Human Operator',
+        agent: decidedBy,
         type: 'APPROVAL',
-        message: `Remediation plan rejected by operator${reason ? `: ${reason}` : ''}. Escalated for manual SRE intervention.`,
+        message: `Remediation plan rejected by ${decidedBy} [${category}]${reason ? `: ${reason}` : ''}. Escalated for manual SRE intervention.`,
         status: 'COMPLETED',
       },
     });
@@ -372,8 +420,46 @@ export class IncidentEvaluator {
         timeline: { orderBy: { timestamp: 'asc' } },
         hypotheses: true,
         remediationPlan: true,
+        decisions: { orderBy: { createdAt: 'desc' } },
         postmortem: true,
       },
     });
+  }
+
+  public async getDecisionStats() {
+    const decisions = await db.remediationDecision.findMany({
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const total = decisions.length;
+    const approved = decisions.filter((d) => d.decision === 'APPROVED').length;
+    const rejected = decisions.filter((d) => d.decision === 'REJECTED').length;
+    const edited = decisions.filter((d) => d.decision === 'EDITED').length;
+
+    const categoryMap = new Map<string, number>();
+    for (const d of decisions) {
+      if (d.category) {
+        categoryMap.set(d.category, (categoryMap.get(d.category) || 0) + 1);
+      }
+    }
+
+    const rejectionsByCategory = Array.from(categoryMap.entries()).map(([category, count]) => ({
+      category,
+      count,
+    }));
+
+    return {
+      totalDecisions: total,
+      approvedCount: approved,
+      rejectedCount: rejected,
+      editedCount: edited,
+      approvalRate: total > 0 ? Number(((approved + edited) / total * 100).toFixed(1)) : 100.0,
+      rejectionRate: total > 0 ? Number((rejected / total * 100).toFixed(1)) : 0.0,
+      rejectionsByCategory,
+      recentDecisions: decisions.slice(0, 10).map((d) => ({
+        ...d,
+        createdAt: d.createdAt.toISOString(),
+      })),
+    };
   }
 }

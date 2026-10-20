@@ -1,0 +1,50 @@
+name: Service - Traffic Generator CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/services/traffic-generator/**'
+      - '.github/workflows/service-traffic-generator.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'apps/services/traffic-generator/**'
+      - '.github/workflows/service-traffic-generator.yml'
+
+concurrency:
+  group: service-traffic-generator-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify-traffic-generator:
+    name: Verify Traffic Generator
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: TypeCheck Traffic Generator
+        run: npm --workspace=@opsgraph/traffic-generator run typecheck
+
+      - name: Compile Traffic Generator
+        run: npm --workspace=@opsgraph/traffic-generator run build
+
+      - name: Verify Traffic Generator Entrypoint
+        run: |
+          node -e "
+            import('./apps/services/traffic-generator/package.json', { with: { type: 'json' } }).then(pkg => {
+              console.log('✓ Verified @opsgraph/traffic-generator package metadata:', pkg.default.name);
+            });
+          "

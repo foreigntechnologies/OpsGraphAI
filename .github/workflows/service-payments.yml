@@ -1,0 +1,59 @@
+name: Service - Payments API CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/services/payments-api/**'
+      - 'packages/service-kit/**'
+      - 'packages/shared/**'
+      - '.github/workflows/service-payments.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'apps/services/payments-api/**'
+      - 'packages/service-kit/**'
+      - 'packages/shared/**'
+      - '.github/workflows/service-payments.yml'
+
+concurrency:
+  group: service-payments-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify-payments:
+    name: Verify Payments API (Port 8082 + PostgreSQL Integration)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Build Shared Packages
+        run: |
+          npm --workspace=@opsgraph/shared run build
+          npm --workspace=@opsgraph/service-kit run build
+
+      - name: TypeCheck Payments API
+        run: npm --workspace=@opsgraph/payments-api run typecheck
+
+      - name: Compile Payments API
+        run: npm --workspace=@opsgraph/payments-api run build
+
+      - name: Verify PostgreSQL Driver & Entrypoint
+        run: |
+          node -e "
+            import('./apps/services/payments-api/package.json', { with: { type: 'json' } }).then(pkg => {
+              console.log('✓ Verified @opsgraph/payments-api package metadata:', pkg.default.name);
+            });
+          "

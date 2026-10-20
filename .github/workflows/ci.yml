@@ -1,0 +1,45 @@
+name: CI - Monorepo Quality Gate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-and-verify:
+    name: Test, TypeCheck & Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: 'npm'
+
+      - name: Install Monorepo Dependencies
+        run: npm ci
+
+      - name: Setup Prisma Database & Run Migrations
+        run: npm run setup
+
+      - name: Run Full Vitest Test Suite (48 tests)
+        run: npm test
+
+      - name: Strict TypeScript Typecheck Across All Workspaces
+        run: npm run typecheck
+
+      - name: Build Next.js Web Application
+        run: npm --workspace=@opsgraph/web run build
+
+      - name: Build Core API
+        run: npm --workspace=@opsgraph/api run build

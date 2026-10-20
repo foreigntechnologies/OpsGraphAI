@@ -106,3 +106,108 @@ describe('target configuration', () => {
     expect(publicUrl('https://example.com/health?token=secret#fragment')).toBe('https://example.com/health');
   });
 });
+
+describe('structured remediation decisions and approval tracking', () => {
+  it('queries decisionStats and records approval and rejection decisions with categories', async () => {
+    // Initial stats check
+    const initialRes = await query('{ decisionStats { totalDecisions approvalRate rejectionRate rejectionsByCategory { category count } } }');
+    expect(initialRes.errors).toBeUndefined();
+    expect(initialRes.data.decisionStats).toBeDefined();
+
+    // Create a real service and incident for testing approval/rejection audit trail
+    const service = await db.service.create({
+      data: {
+        name: `test-service-${Date.now()}`,
+        version: '1.0.0',
+        owner: 'SRE Team',
+      },
+    });
+
+    const incident = await db.incident.create({
+      data: {
+        title: 'High Latency on Test Service',
+        description: 'p95 latency spike detected in test',
+        serviceId: service.id,
+        status: 'AWAITING_APPROVAL',
+        remediationPlan: {
+          create: [
+            {
+              order: 1,
+              title: 'Restart downstream pool',
+              description: 'Recycle connection pool to relieve locks',
+              riskLevel: 'LOW',
+              riskScore: 20,
+              requiresApproval: true,
+              status: 'PENDING',
+            },
+          ],
+        },
+      },
+      include: { remediationPlan: true },
+    });
+
+    // Test structured rejection with categorized reason and operator identity
+    const rejectRes = await query(`
+      mutation {
+        rejectRemediation(
+          incidentId: "${incident.id}"
+          reason: "Database locks were transient, restart unnecessary"
+          category: "FALSE_POSITIVE"
+          decidedBy: "operator@opsgraph.io"
+        ) {
+          id
+          status
+          decisions {
+            decision
+            category
+            reason
+            decidedBy
+          }
+        }
+      }
+    `);
+
+    expect(rejectRes.errors).toBeUndefined();
+    expect(rejectRes.data.rejectRemediation.status).toBe('INVESTIGATING');
+    expect(rejectRes.data.rejectRemediation.decisions).toHaveLength(1);
+    expect(rejectRes.data.rejectRemediation.decisions[0]).toMatchObject({
+      decision: 'REJECTED',
+      category: 'FALSE_POSITIVE',
+      reason: 'Database locks were transient, restart unnecessary',
+      decidedBy: 'operator@opsgraph.io',
+    });
+
+    // Test structured approval with operator identity
+    const approveRes = await query(`
+      mutation {
+        approveRemediation(
+          incidentId: "${incident.id}"
+          decidedBy: "lead-sre@opsgraph.io"
+          reason: "Second assessment confirmed restart is safe"
+        ) {
+          id
+          status
+          decisions {
+            decision
+            decidedBy
+          }
+        }
+      }
+    `);
+
+    expect(approveRes.errors).toBeUndefined();
+    expect(approveRes.data.approveRemediation.status).toBe('MONITORING');
+    expect(approveRes.data.approveRemediation.decisions).toHaveLength(2);
+
+    // Verify decision stats aggregation
+    const statsRes = await query('{ decisionStats { totalDecisions approvedCount rejectedCount rejectionsByCategory { category count } } }');
+    expect(statsRes.errors).toBeUndefined();
+    expect(statsRes.data.decisionStats.totalDecisions).toBeGreaterThanOrEqual(2);
+    expect(statsRes.data.decisionStats.rejectedCount).toBeGreaterThanOrEqual(1);
+    expect(statsRes.data.decisionStats.approvedCount).toBeGreaterThanOrEqual(1);
+    const fpCategory = statsRes.data.decisionStats.rejectionsByCategory.find((c: any) => c.category === 'FALSE_POSITIVE');
+    expect(fpCategory).toBeDefined();
+    expect(fpCategory.count).toBeGreaterThanOrEqual(1);
+  });
+});
+

@@ -58,6 +58,7 @@ model Incident {
   postmortem       Postmortem?
   telemetry        TelemetrySnapshot[]
   agentExecutions  AgentExecution[]
+  decisions        RemediationDecision[]
   startedAt        DateTime                @default(now())
   resolvedAt       DateTime?
   mttdSeconds      Int?
@@ -106,6 +107,24 @@ model RemediationAction {
   status           String    @default("PENDING") // PENDING, APPROVED, REJECTED, EXECUTING, COMPLETED
   executedAt       DateTime?
   createdAt        DateTime  @default(now())
+}
+
+model RemediationDecision {
+  id           String    @id @default(uuid())
+  incidentId   String
+  incident     Incident  @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  actionId     String?
+  actionTitle  String?
+  decidedBy    String    @default("SRE Operator")
+  decision     String    // APPROVED, REJECTED, EDITED
+  category     String?   // INCORRECT_ROOT_CAUSE, RISK_TOO_HIGH, BETTER_MANUAL_ALTERNATIVE, FALSE_POSITIVE, POLICY_RESTRICTION, ROUTINE_APPROVAL, OPERATOR_OVERRIDE
+  reason       String?   // Operator notes and feedback
+  originalPlan String?   // JSON string of proposed action
+  editedPlan   String?   // JSON string of modified action
+  createdAt    DateTime  @default(now())
+
+  @@index([incidentId, createdAt])
+  @@index([decision, category])
 }
 
 model Postmortem {

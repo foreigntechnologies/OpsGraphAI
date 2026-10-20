@@ -11,5 +11,6 @@ dist/
 coverage/
 test-results/
 monitors.json
+real_plan.md
 
 OpsGraph AI.mp4
